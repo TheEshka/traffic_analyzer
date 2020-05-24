@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 #Интервал времени в секундах деления пакетов
-DATE_INTERVAL = 10
+DATE_INTERVAL = 20
 #Список конечных параметров для сравнения. В коде почечены темиже числами для ориентирования
 FEATURES = [
     'client_package_size_mean', #1
@@ -237,8 +237,13 @@ def main():
     df = pd.DataFrame(columns= ['route', 'timestamp'] + FEATURES)
     for i, flow in enumerate(interval_flowed_packages):
         df.loc[i] = getStatisticDataFromFlow(flow)
+    df = df.fillna(0)
 
-    print(df)
+    #saving prepared data
+    dataframe_file = pcap_file_path.split("/")[-1].split(".")
+    dataframe_file[-1] = "pkl"
+    dataframe_file[-2] += "."
+    df.to_pickle("".join(dataframe_file))
 
 if __name__ == "__main__":
     main()
