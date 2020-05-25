@@ -101,6 +101,7 @@ celerybeat.pid
 #csv and pkl
 *.csv
 *.pkl
+*.pcapng
 
 # SageMath parsed files
 *.sage.py

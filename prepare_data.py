@@ -7,19 +7,19 @@ import numpy as np
 import pandas as pd
 
 #Интервал времени в секундах деления пакетов
-DATE_INTERVAL = 20
+DATE_INTERVAL = 60
 #Список конечных параметров для сравнения. В коде почечены темиже числами для ориентирования
 FEATURES = [
-    'client_package_size_mean', #1
-    'client_package_size_std', #2
-    'server_package_size_mean', #3
-    'server_package_size_std', #4
-    'client_batch_sizes_mean', #5
-    'client_batch_sizes_std', #6
-    'server_batch_sizes_mean', #7
-    'server_batch_sizes_std', #8
-    'client_batch_counts_mean', #9
-    'server_batch_counts_mean', #10
+    'client_package_size_mean', #1 Средний размер пакета от клиента
+    'client_package_size_std', #2 Среднеквадратическое отклонение размера пакета от клента
+    'server_package_size_mean', #3 Средний размер пакета от сервера
+    'server_package_size_std', #4 Среднеквадратическое отклонение размера пакета от сервера
+    'client_batch_sizes_mean',z #5 Средний размер партии данных от клиента
+    'client_batch_sizes_std', #6 Среднеквадратическое отклонение размера партии данных от клента
+    'server_batch_sizes_mean', #7 Средний размер партии данных от сервера
+    'server_batch_sizes_std', #8 Среднеквадратическое отклонение размера партии данных от сервера
+    'client_batch_counts_mean', #9 Среднее количество пакетов в партии от клиента --------------------
+    'server_batch_counts_mean', #10 Среднее количество пакетов в партии от сервера
     'client_efficiency', #11
     'server_efficiency', #12
     'ratio_sizes', #13
@@ -65,7 +65,7 @@ def read_pcap_and_return_dataframe(filePath):
         f = open("".join(new_file), "w")
         f.write(output.decode("utf-8"))
         f.close()
-    
+
     # Чтение csv файлы. В данной случае читается из созданного потока, для чтения файла использовать:
     # traffic = pd.read_csv('./traffic.csv', encoding = "ISO-8859-1", low_memory=False)
     traffic = pd.read_csv(io.StringIO(data), sep=',')
@@ -116,12 +116,15 @@ def group_by_time_intervals_and_route(traffic):
             Объект массив кортежей (<интервал времени>, <конечные точки>, <пакеты>).
             Пакеты в Pandas.Dataframe с идентичным вхоным полями.
     '''
-    grouped = traffic.groupby(pd.Grouper(freq=str(DATE_INTERVAL) + 'S', key='frame.time_epoch'))
     intervalledPackeges = list()
-    for key, _ in grouped:
-        intervalledPackeges.append((key, grouped.get_group(key)))
-        
-        
+    #Делю на интервалы времени с разным смешением. Ниже колличество разнообразные смешений
+    intarval_offset_count = 4
+    base_delta = DATE_INTERVAL / 4
+    for i in range(intarval_offset_count):
+        grouped = traffic.groupby(pd.Grouper(freq=str(DATE_INTERVAL) + 'S', key='frame.time_epoch', base=base_delta*i))
+        for key, _ in grouped:
+            intervalledPackeges.append((key, grouped.get_group(key)))
+
     #Разделение пакетов в каждом интервале на потоки (пакеты между двумя конечными точками)
     intervalledFlows = []
     for timeGroup in intervalledPackeges:
@@ -129,7 +132,7 @@ def group_by_time_intervals_and_route(traffic):
         finallMap = {}
         for key, dataframe in grouped:
             route = frozenset(key)
-            if route in finallMap: 
+            if route in finallMap:
                 finallMap[route] = pd.concat([finallMap[route], dataframe])
             else:
                 finallMap[route] = dataframe
@@ -141,7 +144,7 @@ def group_by_time_intervals_and_route(traffic):
     for intervals in intervalledFlows:
         for flowName in intervals[1]:
             allFlowsList.append((intervals[0], flowName, intervals[1][flowName]))
-    
+
     return allFlowsList
 
 def getStatisticDataFromFlow(flow_data):
@@ -153,8 +156,10 @@ def getStatisticDataFromFlow(flow_data):
     statistic_data['client_package_size_mean'] = client_flow['frame.len'].mean()#1
     statistic_data['client_package_size_std'] = client_flow['frame.len'].std()#2
     statistic_data['client_package_size_sum'] = client_flow['frame.len'].sum()#16
-    statistic_data['client_application_size_sum'] = client_flow['application_size'].sum()#17
+    statistic_data['client_application_size_sum'] = client_flow['application_size'].sum() if  client_flow['application_size'].sum() != 0 else 1#17
     statistic_data['client_package_count'] = client_flow.shape[0]#18
+    if statistic_data['client_package_count'] < 6:
+        return
     statistic_data['client_efficiency'] = statistic_data['client_application_size_sum'] / statistic_data['client_package_size_sum']#11
 
     #Пакетовые показатели сервера
@@ -162,8 +167,10 @@ def getStatisticDataFromFlow(flow_data):
     statistic_data['server_package_size_mean'] = server_flow['frame.len'].mean()#3
     statistic_data['server_package_size_std'] = server_flow['frame.len'].std()#4
     statistic_data['server_package_size_sum'] = server_flow['frame.len'].sum()#20
-    statistic_data['server_application_size_sum'] = server_flow['application_size'].sum()#21
+    statistic_data['server_application_size_sum'] = server_flow['application_size'].sum() if  server_flow['application_size'].sum() != 0 else 1#21
     statistic_data['server_package_count'] = server_flow.shape[0]#22
+    if statistic_data['server_package_count'] < 6:
+        return
     statistic_data['server_efficiency'] = statistic_data['server_application_size_sum'] / statistic_data['server_package_size_sum']#12
 
 
@@ -174,9 +181,9 @@ def getStatisticDataFromFlow(flow_data):
 
     statistic_data['transport_protocol'] = flow['ip.proto'].value_counts().idxmax()#24
     statistic_data['ip_protocol_version'] = flow['ip.version'].value_counts().idxmax()#25
-    
-    
-    #Расчет партий(batch) пакетов 
+
+
+    #Расчет партий(batch) пакетов
     #batch_conf = (<количество полезных(имеющих прикладную нагрузку) пакетов>, <суммарный размер пакетов в партии>)
     isClientSender = flow['isFromClient'].iloc[0]
     client_batches = []
@@ -221,7 +228,7 @@ def getStatisticDataFromFlow(flow_data):
     statistic_data['server_batch_sizes_std'] = server_batches_sizes.std()#8
     statistic_data['server_batch_counts_mean'] = server_batches_countes.mean()#10
     statistic_data['server_batch_counts_sum'] = len(server_batches_countes)#23
-    
+
     #Создает массив со всеми параметрами потока ля конечного датасета
     df_row = [flow_data[1], flow_data[0]]
     for name in FEATURES:
@@ -236,7 +243,10 @@ def main():
 
     df = pd.DataFrame(columns= ['route', 'timestamp'] + FEATURES)
     for i, flow in enumerate(interval_flowed_packages):
-        df.loc[i] = getStatisticDataFromFlow(flow)
+        stats = None
+        stats = getStatisticDataFromFlow(flow)
+        if stats:
+            df.loc[i] = getStatisticDataFromFlow(flow)
     df = df.fillna(0)
 
     #saving prepared data
