@@ -7,6 +7,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Activation
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.svm import OneClassSVM
+from sklearn.ensemble import IsolationForest
 import xml.dom.minidom
 import os
 import io
@@ -14,6 +15,7 @@ import pandas as pd
 import numpy as np
 import subprocess
 import sys
+import pickle
 
 #названия файл для хранения тренировочных и тестовых pcap
 template_file_name = ".model_packages"
@@ -75,6 +77,7 @@ def autoencoder_calculation(train_data, test_data, y_val)):
 
 	print("-------------Autoencoder Report Start-------------")
 	print(classification_report(y_val, prediction))
+	return model
 
 # Нормализация числовых данных, так как некоторые модели лучше работают с такими данными (z score)
 def encode_numeric_zscore(df):
@@ -116,19 +119,26 @@ def oneclass_svm_calculation(train_data, test_data, y_val):
 	print("-------------One-Class SVM Report Start-------------")
 	print(classification_report(y_val, prediction))
 
+	return clsfir
+
 def isolation_forest_calculation(train_data, test_data, y_val)):
 
+	clsfir = IsolationForest(bootstrap=True,
+	IsolationForest(bootstrap=True, contamination=0.1, max_features=10, 
+					max_samples=40, n_estimators=80, n_jobs=5, random_state=47)
+	clsfir.fit(train_data)
+	prediction = clsfir.predict(test_data)
 	print("-------------Isolation Forest Report Start-------------")
 	print(classification_report(y_val, prediction))
 
-
+	return clsfir
 
 def main():
 	pcap_file_path = sys.argv[1] if len(sys.argv) > 1 else sys.exit('No file name: plese enter input PCAP file name')
 
 	train_data, test_data, xml = create_train_and_test_data(pcap_file_path)
 
-	#Массив маркоров для тестового датасета
+	#Массив маркеров для тестового датасета
 	y_val = []
 	for _,  route in test_data['route'].items():
 		y.append(1)
@@ -137,10 +147,14 @@ def main():
 				y[-1] = -1
 				break
 
-	isolation_forest_calculation(train_data, test_data)
-	oneclass_svm_calculation(train_data, test_data)
-	autoencoder_calculation(train_data, test_data)
-
+	isolation_forest_model = isolation_forest_calculation(train_data, test_data)
+	oneclass_svm_model = oneclass_svm_calculation(train_data, test_data)
+	autoencoder_model = autoencoder_calculation(train_data, test_data)
+	
+	file_start = pcap_file_path.split(".")[-2]
+	pickle.dump(isolation_forest_model, open(file_start + "isolation_fores", 'w'))
+	pickle.dump(oneclass_svm_model, open(file_start + "oneclass_svm", 'w'))
+	pickle.dump(autoencoder_model, open(file_start + "autoencoder_fores", 'w'))
 
 if __name__ == "__main__":
 	main()
