@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 
-from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Activation
@@ -76,7 +75,7 @@ def autoencoder_calculation(train_data, test_data, y_val)):
 	prediction = model.predict(test_data)
 
 	print("-------------Autoencoder Report Start-------------")
-	print(classification_report(y_val, prediction))
+	print(metrics.classification_report(y_val, prediction))
 	return model
 
 # Нормализация числовых данных, так как некоторые модели лучше работают с такими данными (z score)
@@ -117,7 +116,7 @@ def oneclass_svm_calculation(train_data, test_data, y_val):
 	clsfir.fit(train_data)
 	prediction = clsfir.predict(test_data)
 	print("-------------One-Class SVM Report Start-------------")
-	print(classification_report(y_val, prediction))
+	print(metrics.classification_report(y_val, prediction))
 
 	return clsfir
 
@@ -129,7 +128,7 @@ def isolation_forest_calculation(train_data, test_data, y_val)):
 	clsfir.fit(train_data)
 	prediction = clsfir.predict(test_data)
 	print("-------------Isolation Forest Report Start-------------")
-	print(classification_report(y_val, prediction))
+	print(metrics.classification_report(y_val, prediction))
 
 	return clsfir
 
@@ -143,7 +142,7 @@ def main():
 	for _,  route in test_data['route'].items():
 		y.append(1)
 		for ip in xml['object.src.ip']:
-			if route.contains("ip"):
+			if ip in route:
 				y[-1] = -1
 				break
 
